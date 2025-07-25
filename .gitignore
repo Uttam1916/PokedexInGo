@@ -1,0 +1,5 @@
+go.mod
+unit_test.go
+build/
+ 
+*.log
