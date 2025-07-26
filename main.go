@@ -11,12 +11,14 @@ import (
 )
 
 type config struct {
-	Next     string
-	Previous string
+	next     string
+	previous string
 }
 
 type jsonResult struct {
-	Result []locationAreas `json:"results"`
+	Result   []locationAreas `json:"results"`
+	Next     string          `json:"next"`
+	Previous string          `json:"previous"`
 }
 
 type locationAreas struct {
@@ -27,13 +29,16 @@ type locationAreas struct {
 type cliCommand struct {
 	name        string
 	description string
-	callback    func() error
+	callback    func(c *config) error
 }
 
 // mamke commands globally accesible
 var commands = map[string]cliCommand{}
 
 func main() {
+	c := config{
+		next: "https://pokeapi.co/api/v2/location-area?offset=0&limit=20",
+	}
 
 	commands["exit"] = cliCommand{
 		name:        "exit",
@@ -47,8 +52,13 @@ func main() {
 	}
 	commands["map"] = cliCommand{
 		name:        "map",
-		description: "Prints 20 locations",
+		description: "Prints next 20 locations",
 		callback:    commandMap,
+	}
+	commands["mapb"] = cliCommand{
+		name:        "mapb",
+		description: "Prints previous 20 locations",
+		callback:    commandMapb,
 	}
 
 	// create a scanner to read line by line
@@ -64,19 +74,19 @@ func main() {
 		//check if command exists
 		cmd, ok := commands[input]
 		if !ok {
-			fmt.Printf("Unkown command")
+			fmt.Printf("Unkown command\n")
 			continue
 
 		}
 
-		err := cmd.callback()
+		err := cmd.callback(&c)
 		if err != nil {
 			fmt.Println("Something went wrong : ", err)
 		}
 	}
 }
 
-func commandHelp() error {
+func commandHelp(c *config) error {
 	fmt.Println("Usages:")
 	for _, com := range commands {
 		fmt.Printf("%v : %v\n", com.name, com.description)
@@ -84,15 +94,36 @@ func commandHelp() error {
 	return nil
 }
 
-func commandExit() error {
+func commandExit(c *config) error {
 	fmt.Println("Thank you for using Pokedex!")
 	os.Exit(0)
 	return nil
 }
+func commandMapb(c *config) error {
+	if c.previous == "" {
+		fmt.Println("already at the beginning")
+	}
+	err := fetchdata(c.previous, c)
+	if err != nil {
+		fmt.Println("error fetching data")
+	}
+	return nil
+}
 
-func commandMap() error {
+func commandMap(c *config) error {
+	if c.next == "" {
+		fmt.Println("already at the end")
+	}
+	err := fetchdata(c.next, c)
+	if err != nil {
+		fmt.Println("error fetching data")
+	}
+	return nil
+}
+
+func fetchdata(url string, c *config) error {
 	// make the request
-	res, err := http.Get("https://pokeapi.co/api/v2/location-area")
+	res, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("error making request", err)
 	}
@@ -114,7 +145,9 @@ func commandMap() error {
 	for _, area := range areas.Result {
 		fmt.Printf("%s\n", area.Name)
 	}
-
+	//change the config to paginate
+	c.next = areas.Next
+	c.previous = areas.Previous
 	return nil
 }
 
