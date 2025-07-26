@@ -7,7 +7,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
+
+	"github.com/Uttam1916/PokedexInGo/internal/pokecache"
 )
+
+var cache *pokecache.Cache
 
 type config struct {
 	next     string
@@ -35,6 +40,8 @@ type cliCommand struct {
 var commands = map[string]cliCommand{}
 
 func main() {
+	cache = pokecache.NewCache(1 * time.Minute)
+
 	c := config{
 		next: "https://pokeapi.co/api/v2/location-area?offset=0&limit=20",
 	}
@@ -102,6 +109,7 @@ func commandExit(c *config) error {
 func commandMapb(c *config) error {
 	if c.previous == "" {
 		fmt.Println("already at the beginning")
+		return nil
 	}
 	err := fetchdata(c.previous, c)
 	if err != nil {
@@ -113,6 +121,7 @@ func commandMapb(c *config) error {
 func commandMap(c *config) error {
 	if c.next == "" {
 		fmt.Println("already at the end")
+		return nil
 	}
 	err := fetchdata(c.next, c)
 	if err != nil {
