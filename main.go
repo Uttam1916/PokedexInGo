@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 )
 
 type config struct {
@@ -99,6 +98,7 @@ func commandExit(c *config) error {
 	os.Exit(0)
 	return nil
 }
+
 func commandMapb(c *config) error {
 	if c.previous == "" {
 		fmt.Println("already at the beginning")
@@ -122,23 +122,34 @@ func commandMap(c *config) error {
 }
 
 func fetchdata(url string, c *config) error {
+	//try to get from cache
+	if data, ok := cache.Get(url); ok {
+		return processData(data, c)
+	}
+
 	// make the request
 	res, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("error making request", err)
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode > 299 {
+		return fmt.Errorf("Status code >299")
+	}
 	// create a slice of bytes from the io reader
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return fmt.Errorf("error creating body", err)
 	}
-	if res.StatusCode > 299 {
-		return fmt.Errorf("Status code >299")
-	}
-	// decode the bytes into a struct
+	cache.Add(url, body)
+	return processData(body, c)
+
+}
+
+func processData(data []byte, c *config) error {
 	var areas jsonResult
-	err = json.Unmarshal(body, &areas)
+	err := json.Unmarshal(data, &areas)
 	if err != nil {
 		return fmt.Errorf("couldnt decode json to struct")
 	}
@@ -149,13 +160,4 @@ func fetchdata(url string, c *config) error {
 	c.next = areas.Next
 	c.previous = areas.Previous
 	return nil
-}
-
-func cleanInput(text string) []string {
-	text = strings.TrimSpace(text)
-
-	if text == "" {
-		return []string{}
-	}
-	return strings.Fields(text)
 }
