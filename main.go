@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Uttam1916/PokedexInGo/internal/pokecache"
@@ -19,7 +20,12 @@ type config struct {
 	previous string
 }
 
-type jsonResult struct {
+type jsonSpecificlocationArea struct {
+	Location locationAreas      `json:"location"`
+	Pokemons []pokemonEncounter `json:"pokemon_encounters"`
+}
+
+type jsonLocationArea struct {
 	Result   []locationAreas `json:"results"`
 	Next     string          `json:"next"`
 	Previous string          `json:"previous"`
@@ -30,16 +36,27 @@ type locationAreas struct {
 	Url  string `json:"url"`
 }
 
+type pokemonEncounter struct {
+	Pokemon pokemon `json:"pokemon"`
+}
+
+type pokemon struct {
+	PokemonName string `json:"name"`
+	PokemonUrl  string `json:"url"`
+}
+
 type cliCommand struct {
 	name        string
 	description string
 	callback    func(c *config) error
+	callbackwp  func(c *config, url string) error
 }
 
 // mamke commands globally accesible
 var commands = map[string]cliCommand{}
 
 func main() {
+	// initializing cache and url
 	cache = pokecache.NewCache(1 * time.Minute)
 
 	c := config{
@@ -66,6 +83,11 @@ func main() {
 		description: "Prints previous 20 locations",
 		callback:    commandMapb,
 	}
+	commands["explore"] = cliCommand{
+		name:        "explore",
+		description: "explores area for pokemon",
+		callbackwp:  commandExplore,
+	}
 
 	// create a scanner to read line by line
 	scanner := bufio.NewScanner(os.Stdin)
@@ -75,19 +97,25 @@ func main() {
 	for {
 		fmt.Print("Pokedex > ")
 		scanner.Scan()
-		input := scanner.Text()
+		input := cleanInput(scanner.Text())
 
 		//check if command exists
-		cmd, ok := commands[input]
+		cmd, ok := commands[input[0]]
 		if !ok {
 			fmt.Printf("Unkown command\n")
 			continue
 
 		}
-
-		err := cmd.callback(&c)
-		if err != nil {
-			fmt.Println("Something went wrong : ", err)
+		if len(input) == 1 {
+			err := cmd.callback(&c)
+			if err != nil && input[1] != "" {
+				fmt.Println("Something went wrong : ", err)
+			}
+		} else {
+			err := cmd.callbackwp(&c, input[1])
+			if err != nil {
+				fmt.Println("Something went wrong : ", err)
+			}
 		}
 	}
 }
@@ -157,7 +185,7 @@ func fetchdata(url string, c *config) error {
 }
 
 func processData(data []byte, c *config) error {
-	var areas jsonResult
+	var areas jsonLocationArea
 	err := json.Unmarshal(data, &areas)
 	if err != nil {
 		return fmt.Errorf("couldnt decode json to struct")
@@ -169,4 +197,31 @@ func processData(data []byte, c *config) error {
 	c.next = areas.Next
 	c.previous = areas.Previous
 	return nil
+}
+
+func commandExplore(c *config, location_name string) error {
+	res, err := http.Get("https://pokeapi.co/api/v2/location-area/" + location_name)
+	if err != nil {
+		fmt.Println("error requesting poke-encounters")
+		return nil
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println("error reading body")
+		return nil
+	}
+
+	var specific_area jsonSpecificlocationArea
+	err = json.Unmarshal(body, &specific_area)
+	for _, pokemon := range specific_area.Pokemons {
+		fmt.Println(pokemon.Pokemon.PokemonName)
+	}
+	return nil
+}
+
+func cleanInput(text string) []string {
+	words := strings.Fields(strings.TrimSpace(text))
+	return words
 }
