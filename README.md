@@ -1,6 +1,6 @@
 # PokedexInGo
 
-A barebones pokedex written in go utilising PokéAPI
+A barebones repl-style pokedex written in go utilising PokéAPI
 
 ## Features
 
@@ -9,7 +9,6 @@ A barebones pokedex written in go utilising PokéAPI
 - 🥏 **Catch Pokémon**: Try your luck catching Pokémon based on their difficulty.
 - 📓 **Pokedex**: View all Pokémon you've successfully caught.
 - 🧠 **Caching**: Caches API responses to reduce repeated network requests.
-- 🔧 **Modular Structure**: Organized with internal packages for clean architecture.
 
 ## Installation
 
