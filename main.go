@@ -10,10 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"math/rand"
+
 	"github.com/Uttam1916/PokedexInGo/internal/pokecache"
 )
 
 var cache *pokecache.Cache
+var user_Pokedex map[string]pokepoke
 
 type config struct {
 	next     string
@@ -44,6 +47,10 @@ type pokemon struct {
 	PokemonName string `json:"name"`
 	PokemonUrl  string `json:"url"`
 }
+type pokepoke struct {
+	Base_experience int    `json:"base_experience"`
+	Pokepoke        string `json:"name"`
+}
 
 type cliCommand struct {
 	name        string
@@ -62,6 +69,8 @@ func main() {
 	c := config{
 		next: "https://pokeapi.co/api/v2/location-area?offset=0&limit=20",
 	}
+
+	user_Pokedex = make(map[string]pokepoke)
 
 	commands["exit"] = cliCommand{
 		name:        "exit",
@@ -83,16 +92,26 @@ func main() {
 		description: "Prints previous 20 locations",
 		callback:    commandMapb,
 	}
+	commands["pokedex"] = cliCommand{
+		name:        "pokedex",
+		description: "lists caught pokemon",
+		callback:    showPokemon,
+	}
 	commands["explore"] = cliCommand{
 		name:        "explore",
 		description: "explores area for pokemon",
 		callbackwp:  commandExplore,
 	}
+	commands["catch"] = cliCommand{
+		name:        "catch",
+		description: "tries to catch a pokemon",
+		callbackwp:  commandCatch,
+	}
 
 	// create a scanner to read line by line
 	scanner := bufio.NewScanner(os.Stdin)
 	//infinite for loop to wait for user input
-	fmt.Println("Pokedex > Hello!")
+	fmt.Println("Welcome to pokedex!")
 
 	for {
 		fmt.Print("Pokedex > ")
@@ -212,7 +231,7 @@ func commandExplore(c *config, location_name string) error {
 		fmt.Println("error reading body")
 		return nil
 	}
-
+	//print pokemons present in area
 	var specific_area jsonSpecificlocationArea
 	err = json.Unmarshal(body, &specific_area)
 	for _, pokemon := range specific_area.Pokemons {
@@ -221,7 +240,55 @@ func commandExplore(c *config, location_name string) error {
 	return nil
 }
 
+func commandCatch(c *config, pokemon_name string) error {
+	res, err := http.Get("https://pokeapi.co/api/v2/pokemon/" + pokemon_name)
+	if err != nil {
+		fmt.Println("error requesting pokemon-stats")
+		return nil
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println("error reading body")
+		return nil
+	}
+	var catching_poke pokepoke
+	err = json.Unmarshal(body, &catching_poke)
+	// try catching the pokemon
+	fmt.Printf("Throwing a pokeball at %s...\n", pokemon_name)
+	println("Trying...")
+	time.Sleep(time.Millisecond * 700)
+	println("Trying...")
+	time.Sleep(time.Millisecond * 700)
+	println("Almost there..")
+	time.Sleep(time.Millisecond * 1000)
+	// Calculate catch chance
+	// baseExperience: ~50 (easy) to 300+ (hard)
+	catchChance := 1.0 / (float64(catching_poke.Base_experience)/50.0 + 1.0)
+	if catchChance > 0.8 {
+		catchChance = 0.8
+	}
+	if rand.Float64() < catchChance {
+		fmt.Printf("You caught %s!\n", pokemon_name)
+		user_Pokedex[pokemon_name] = catching_poke
+	} else {
+		fmt.Printf("%s escaped!\n", pokemon_name)
+	}
+
+	return nil
+}
+
 func cleanInput(text string) []string {
 	words := strings.Fields(strings.TrimSpace(text))
 	return words
+}
+
+func showPokemon(c *config) error {
+	i := 1
+	for name, pokestruct := range user_Pokedex {
+		fmt.Printf("%v. %v XP: %d \n", i, name, pokestruct.Base_experience)
+		i++
+	}
+	return nil
 }
