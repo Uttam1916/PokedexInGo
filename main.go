@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
 	"time"
-
-	"math/rand"
 
 	"github.com/Uttam1916/PokedexInGo/internal/pokecache"
 )
@@ -63,8 +62,10 @@ type cliCommand struct {
 var commands = map[string]cliCommand{}
 
 func main() {
-	// initializing cache and url
+	// initializing cache,pokedex,seed and url
 	cache = pokecache.NewCache(1 * time.Minute)
+
+	rand.Seed(time.Now().UnixNano())
 
 	c := config{
 		next: "https://pokeapi.co/api/v2/location-area?offset=0&limit=20",
@@ -99,44 +100,63 @@ func main() {
 	}
 	commands["explore"] = cliCommand{
 		name:        "explore",
-		description: "explores area for pokemon",
+		description: "explores area for pokemon, takes location on map as parameter",
 		callbackwp:  commandExplore,
 	}
 	commands["catch"] = cliCommand{
 		name:        "catch",
-		description: "tries to catch a pokemon",
+		description: "tries to catch a pokemon, takes pokemon names as parameter",
 		callbackwp:  commandCatch,
 	}
 
 	// create a scanner to read line by line
 	scanner := bufio.NewScanner(os.Stdin)
 	//infinite for loop to wait for user input
-	fmt.Println("Welcome to pokedex!")
+	showIntro()
 
 	for {
 		fmt.Print("Pokedex > ")
 		scanner.Scan()
 		input := cleanInput(scanner.Text())
 
-		//check if command exists
+		if len(input) == 0 {
+			fmt.Println("Please enter a command.")
+			continue
+		}
+
 		cmd, ok := commands[input[0]]
 		if !ok {
-			fmt.Printf("Unkown command\n")
+			fmt.Printf("Unknown command\n")
 			continue
-
 		}
-		if len(input) == 1 {
-			err := cmd.callback(&c)
-			if err != nil && input[1] != "" {
-				fmt.Println("Something went wrong : ", err)
+
+		// Commands without extra argument
+		if cmd.callback != nil {
+			if len(input) != 1 {
+				fmt.Println("This command doesn't take any arguments.")
+				continue
 			}
-		} else {
+			err := cmd.callback(&c)
+			if err != nil {
+				fmt.Println("Something went wrong:", err)
+			}
+			continue
+		}
+
+		// Commands with one extra argument
+		if cmd.callbackwp != nil {
+			if len(input) != 2 {
+				fmt.Println("This command requires exactly one argument.")
+				continue
+			}
 			err := cmd.callbackwp(&c, input[1])
 			if err != nil {
-				fmt.Println("Something went wrong : ", err)
+				fmt.Println("Something went wrong:", err)
 			}
+			continue
 		}
 	}
+
 }
 
 func commandHelp(c *config) error {
@@ -234,6 +254,11 @@ func commandExplore(c *config, location_name string) error {
 	//print pokemons present in area
 	var specific_area jsonSpecificlocationArea
 	err = json.Unmarshal(body, &specific_area)
+	if err != nil {
+		fmt.Println("error decoding JSON:", err)
+		return nil
+	}
+
 	for _, pokemon := range specific_area.Pokemons {
 		fmt.Println(pokemon.Pokemon.PokemonName)
 	}
@@ -246,6 +271,11 @@ func commandCatch(c *config, pokemon_name string) error {
 		fmt.Println("error requesting pokemon-stats")
 		return nil
 	}
+	if res.StatusCode != 200 {
+		fmt.Printf("Could not find Pokémon '%s'.\n", pokemon_name)
+		return nil
+	}
+
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
@@ -286,9 +316,32 @@ func cleanInput(text string) []string {
 
 func showPokemon(c *config) error {
 	i := 1
+	if len(user_Pokedex) == 0 {
+		fmt.Println("You haven't caught any Pokémon yet!")
+		return nil
+	}
 	for name, pokestruct := range user_Pokedex {
 		fmt.Printf("%v. %v XP: %d \n", i, name, pokestruct.Base_experience)
 		i++
 	}
 	return nil
+}
+
+func showIntro() {
+	fmt.Println("\033[1;34m=====================================\033[0m")
+	fmt.Println("\033[1;33m🧭  Welcome to the Pokémon CLI Dex!  \033[0m")
+	fmt.Println("\033[1;34m=====================================\033[0m")
+	fmt.Println("Explore, catch, and list Pokémon using simple commands.")
+
+	fmt.Println("\033[1;36m📖 Available Commands:\033[0m")
+	fmt.Println("  \033[1;32mhelp\033[0m               - Show this help message")
+	fmt.Println("  \033[1;32mmap\033[0m                - Show next 20 location areas")
+	fmt.Println("  \033[1;32mmapb\033[0m               - Show previous 20 location areas")
+	fmt.Println("  \033[1;32mexplore <area>\033[0m     - Explore a location for Pokémon")
+	fmt.Println("  \033[1;32mcatch <name>\033[0m       - Try to catch a Pokémon by name")
+	fmt.Println("  \033[1;32mpokedex\033[0m            - Show your caught Pokémon")
+	fmt.Println("  \033[1;32mexit\033[0m               - Exit the application")
+
+	fmt.Println("\n\033[1;36m💡 Tip:\033[0m Type 'help' anytime to see this again.")
+	fmt.Println("\033[1;34m=====================================\033[0m\n")
 }
